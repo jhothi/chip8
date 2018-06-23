@@ -16,7 +16,7 @@ type cpu struct {
 	key        [16]byte
 }
 
-func (cpu *cpu) emulate(memory []uint8) {
+func (cpu *cpu) emulate(memory []uint8, io io) {
 	opCode := uint16(memory[cpu.pc]<<8 | memory[cpu.pc+1])
 	switch opCode & 0xF000 {
 
@@ -167,7 +167,7 @@ func (cpu *cpu) emulate(memory []uint8) {
 		x := opCode & 0x0F00
 		y := opCode & 0x00F0
 		if x != y {
-			cpu.pc += 2;
+			cpu.pc += 2
 		}
 
 	case 0xA000:
@@ -195,15 +195,22 @@ func (cpu *cpu) emulate(memory []uint8) {
 		cpu.v[x] = byte(r1.Intn(255)) & byte(kk)
 
 	case 0xD000:
+		//Dxyn - DRW Vx, Vy, nibble
 		//Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
 		//The interpreter reads n bytes from memory, starting at the address stored in I.
 		//These bytes are then displayed as sprites on screen at coordinates (Vx, Vy). Sprites are XORed onto the existing screen.
 		//If this causes any pixels to be erased, VF is set to 1, otherwise it is set to 0.
 		//If the sprite is positioned so part of it is outside the coordinates of the display, it wraps around to the opposite side of the screen.
-		//TODO: implement render
+		x := opCode & 0x0F00
+		y := opCode & 0x00F0
+		n := opCode & 0x000F
+		collision := io.draw(memory[cpu.i : cpu.i + n], byte(x), byte(y))
+		if collision {
+			cpu.v[15] = 1
+		}
 
 	case 0xE000:
-		x := 0x0F00
+		x := opCode & 0x0F00
 		switch opCode & 0x00FF {
 
 		case 0x9E:
