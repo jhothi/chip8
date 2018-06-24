@@ -3,6 +3,7 @@ package emulator
 import (
 	"math/rand"
 	"time"
+	"fmt"
 )
 
 type cpu struct {
@@ -13,12 +14,29 @@ type cpu struct {
 	soundTimer byte
 	stack      [16]uint16
 	sp         uint16
-	key        [16]byte
 }
 
-func (cpu *cpu) emulate(memory []uint8, io io) {
-	opCode := uint16(memory[cpu.pc]<<8 | memory[cpu.pc+1])
+func (cpu *cpu) emulate(memory []byte, io *io) {
+	opCode := uint16(memory[cpu.pc])<<8 | uint16(memory[cpu.pc+1])
+	fmt.Printf("Read opCode %X cpu %v\n", opCode, cpu)
 	switch opCode & 0xF000 {
+
+	case 0x0000:
+		switch opCode & 0x00FF {
+
+		case 0xE0:
+			//00E0 - CLS
+			//Clear the display.
+			io.clearDisplay()
+			cpu.pc += 2
+		case 0xEE:
+			//00EE - RET
+			//Return from a subroutine.
+			//The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer.
+			cpu.pc = cpu.stack[cpu.sp]
+			cpu.sp--
+			cpu.pc += 2
+		}
 
 	case 0x1000:
 		//1nnn - JP addr
@@ -26,13 +44,24 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 		//The interpreter sets the program counter to nnn.
 		cpu.pc = opCode & 0x0FFF
 
+	case 0x2000:
+		//2nnn - CALL addr
+		//Call subroutine at nnn.
+		//The interpreter increments the stack pointer, then puts the current PC on the top of the stack. The PC is then set to nnn.
+		nnn := opCode & 0x0FFF
+		cpu.sp++
+		cpu.stack[cpu.sp] = cpu.pc
+		cpu.pc = nnn
+
 	case 0x3000:
 		//3xkk - SE Vx, byte
 		//Skip next instruction if Vx = kk.
 		//The interpreter compares register Vx to kk, and if they are equal, increments the program counter by 2.
-		x := opCode & 0x0F00
+		x := opCode & 0x0F00 >> 8
 		kk := byte(opCode & 0x00FF)
 		if cpu.v[x] == kk {
+			cpu.pc += 4
+		} else {
 			cpu.pc += 2
 		}
 
@@ -40,41 +69,52 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 		//4xkk - SNE Vx, byte
 		//Skip next instruction if Vx != kk.
 		//The interpreter compares register Vx to kk, and if they are not equal, increments the program counter by 2.
-		x := opCode & 0x0F00
+		x := opCode & 0x0F00 >> 8
 		kk := byte(opCode & 0x00FF)
 		if cpu.v[x] != kk {
+			cpu.pc += 4
+		} else {
 			cpu.pc += 2
 		}
 
 	case 0x5000:
-		//5xy0 - SE Vx, Vy
-		//Skip next instruction if Vx = Vy.
-		//The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
-		x := opCode & 0x0F00
-		y := opCode & 0x00F0
-		if x == y {
-			cpu.pc += 2
+		switch opCode & 0x000F {
+
+		case 0:
+			//5xy0 - SE Vx, Vy
+			//Skip next instruction if Vx = Vy.
+			//The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
+			x := opCode & 0x0F00 >> 8
+			y := opCode & 0x00F0 >> 4
+			if x == y {
+				cpu.pc += 4
+			} else {
+				cpu.pc += 2
+			}
 		}
 
 	case 0x6000:
 		//6xkk - LD Vx, byte
 		//Set Vx = kk.
 		//The interpreter puts the value kk into register Vx.
-		x := opCode & 0x0F00
+		x := opCode & 0x0F00 >> 8
 		kk := byte(opCode & 0x00FF)
+		fmt.Printf("kk=%X x=%X\n", kk, x)
 		cpu.v[x] = kk
+		cpu.pc += 2
 
 	case 0x7000:
 		//7xkk - ADD Vx, byte
 		//Set Vx = Vx + kk.
 		//Adds the value kk to the value of register Vx, then stores the result in Vx.
-		x := opCode & 0x0F00
+		x := opCode & 0x0F00 >> 8
 		kk := byte(opCode & 0x00FF)
 		cpu.v[x] += kk
+		cpu.pc += 2
 
 	case 0x8000:
-		x := opCode & 0x0F00
-		y := opCode & 0x00F0
+		x := opCode & 0x0F00 >> 8
+		y := opCode & 0x00F0 >> 4
 		switch opCode & 0x000F {
 
 		case 0x0000:
@@ -82,24 +122,28 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 			//Set Vx = Vy.
 			//Stores the value of register Vy in register Vx.
 			cpu.v[x] = cpu.v[y]
+			cpu.pc += 2
 
 		case 0x0001:
 			//8xy1 - OR Vx, Vy
 			//Set Vx = Vx OR Vy.
 			//Performs a bitwise OR on the values of Vx and Vy, then stores the result in Vx.
 			cpu.v[x] = cpu.v[x] | cpu.v[y]
+			cpu.pc += 2
 
 		case 0x0002:
 			//8xy2 - AND Vx, Vy
 			//Set Vx = Vx AND Vy.
 			//Performs a bitwise AND on the values of Vx and Vy, then stores the result in Vx.
 			cpu.v[x] = cpu.v[x] & cpu.v[y]
+			cpu.pc += 2
 
 		case 0x0003:
 			//8xy3 - XOR Vx, Vy
 			//Set Vx = Vx XOR Vy.
 			//Performs a bitwise exclusive OR on the values of Vx and Vy, then stores the result in Vx.
 			cpu.v[x] = cpu.v[x] ^ cpu.v[y]
+			cpu.pc += 2
 
 		case 0x0004:
 			//8xy4 - ADD Vx, Vy
@@ -113,6 +157,7 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 				cpu.v[0xF] = 0
 			}
 			cpu.v[x] = byte(result & 0x00FF)
+			cpu.pc += 2
 
 		case 0x0005:
 			//8xy5 - SUB Vx, Vy
@@ -124,17 +169,19 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 				cpu.v[0xF] = 0
 			}
 			cpu.v[x] -= cpu.v[y]
+			cpu.pc += 2
 
 		case 0x0006:
 			//8xy6 - SHR Vx {, Vy}
 			//Set Vx = Vx SHR 1.
 			//If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
-			if cpu.v[x]&0x01 == 1 {
+			if cpu.v[x]&1 == 1 {
 				cpu.v[0xF] = 1
 			} else {
 				cpu.v[0xF] = 0
 			}
 			cpu.v[x] = cpu.v[x] >> 1
+			cpu.pc += 2
 
 		case 0x0007:
 			//8xy7 - SUBN Vx, Vy
@@ -146,8 +193,9 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 				cpu.v[0xF] = 0
 			}
 			cpu.v[x] = cpu.v[y] - cpu.v[x]
+			cpu.pc += 2
 
-		default:
+		case 0x000E:
 			//8xyE - SHL Vx {, Vy}
 			//Set Vx = Vx SHL 1.
 			//If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
@@ -157,6 +205,7 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 				cpu.v[0xF] = 0
 			}
 			cpu.v[x] = cpu.v[x] << 1
+			cpu.pc += 2
 
 		}
 
@@ -164,9 +213,11 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 		//9xy0 - SNE Vx, Vy
 		//Skip next instruction if Vx != Vy.
 		//The values of Vx and Vy are compared, and if they are not equal, the program counter is increased by 2.
-		x := opCode & 0x0F00
-		y := opCode & 0x00F0
+		x := opCode & 0x0F00 >> 8
+		y := opCode & 0x00F0 >> 4
 		if x != y {
+			cpu.pc += 4
+		} else {
 			cpu.pc += 2
 		}
 
@@ -190,9 +241,10 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 		//The results are stored in Vx.
 		s1 := rand.NewSource(time.Now().UnixNano())
 		r1 := rand.New(s1)
-		x := opCode & 0x0F00
+		x := opCode & 0x0F00 >> 8
 		kk := opCode & 0x00FF
 		cpu.v[x] = byte(r1.Intn(255)) & byte(kk)
+		cpu.pc += 2
 
 	case 0xD000:
 		//Dxyn - DRW Vx, Vy, nibble
@@ -201,23 +253,29 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 		//These bytes are then displayed as sprites on screen at coordinates (Vx, Vy). Sprites are XORed onto the existing screen.
 		//If this causes any pixels to be erased, VF is set to 1, otherwise it is set to 0.
 		//If the sprite is positioned so part of it is outside the coordinates of the display, it wraps around to the opposite side of the screen.
-		x := opCode & 0x0F00
-		y := opCode & 0x00F0
+		x := opCode & 0x0F00 >> 8
+		y := opCode & 0x00F0 >> 4
 		n := opCode & 0x000F
-		collision := io.draw(memory[cpu.i : cpu.i + n], byte(x), byte(y))
+		fmt.Printf("x %X y %X n %X vx %X vy %X mem %v\n", x, y, n, cpu.v[x], cpu.v[y], memory[cpu.i:cpu.i+n])
+		collision := io.draw(memory[cpu.i:cpu.i+n], cpu.v[x], cpu.v[y])
 		if collision {
 			cpu.v[15] = 1
+		} else {
+			cpu.v[15] = 0
 		}
+		cpu.pc += 2
 
 	case 0xE000:
-		x := opCode & 0x0F00
+		x := opCode & 0x0F00 >> 8
 		switch opCode & 0x00FF {
 
 		case 0x9E:
 			//Ex9E - SKP Vx
 			//Skip next instruction if key with the value of Vx is pressed.
 			//Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2.
-			if cpu.key[cpu.v[x]] == 1 { // TODO: fix check
+			if io.getKeyPress(cpu.v[x]) == 1 {
+				cpu.pc += 4
+			} else {
 				cpu.pc += 2
 			}
 
@@ -225,14 +283,16 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 			//ExA1 - SKNP Vx
 			//Skip next instruction if key with the value of Vx is not pressed.
 			//Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2.
-			if cpu.key[cpu.v[x]] != 1 { // TODO: fix check
+			if io.getKeyPress(cpu.v[x]) != 1 {
+				cpu.pc += 4
+			} else {
 				cpu.pc += 2
 			}
 
 		}
 
 	case 0xF000:
-		x := opCode & 0x0F00
+		x := opCode & 0x0F00 >> 8
 		switch opCode & 0x00FF {
 
 		case 0x07:
@@ -240,36 +300,45 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 			//Set Vx = delay timer value.
 			//The value of DT is placed into Vx.
 			cpu.v[x] = cpu.delayTimer
+			cpu.pc += 2
 
 		case 0x0A:
 			//Fx0A - LD Vx, K
 			//Wait for a key press, store the value of the key in Vx.
 			//All execution stops until a key is pressed, then the value of that key is stored in Vx.
-			//TODO read key press
+			//val, err := io.readKeyPress()
+			//if err == nil {
+			//	cpu.v[x] = val
+			//}
+			//cpu.pc += 2
 
 		case 0x15:
 			//Fx15 - LD DT, Vx
 			//Set delay timer = Vx.
 			//DT is set equal to the value of Vx.
 			cpu.delayTimer = cpu.v[x]
+			cpu.pc += 2
 
 		case 0x18:
 			//Fx18 - LD ST, Vx
 			//Set sound timer = Vx.
 			//ST is set equal to the value of Vx.
 			cpu.soundTimer = cpu.v[x]
+			cpu.pc += 2
 
 		case 0x1E:
 			//Fx1E - ADD I, Vx
 			//Set I = I + Vx.
 			//The values of I and Vx are added, and the results are stored in I.
 			cpu.i += uint16(cpu.v[x])
+			cpu.pc += 2
 
 		case 0x29:
 			//Fx29 - LD F, Vx
 			//Set I = location of sprite for digit Vx.
 			//The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx.
-			//TODO
+			cpu.i = uint16(memory[cpu.v[x]*5])
+			cpu.pc += 2
 
 		case 0x33:
 			//Fx33 - LD B, Vx
@@ -278,6 +347,7 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 			memory[cpu.i] = cpu.v[x] / 100
 			memory[cpu.i+1] = (cpu.v[x] / 10) % 10
 			memory[cpu.i+2] = (cpu.v[x] % 10) % 10
+			cpu.pc += 2
 
 		case 0x55:
 			//Fx55 - LD [I], Vx
@@ -286,6 +356,7 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 			for i, v := range cpu.v[0 : x+1] {
 				memory[cpu.i+uint16(i)] = v
 			}
+			cpu.pc += 2
 
 		case 0x65:
 			//Fx65 - LD Vx, [I]
@@ -294,6 +365,7 @@ func (cpu *cpu) emulate(memory []uint8, io io) {
 			for i := 0; uint16(i) <= x; i++ {
 				cpu.v[i] = memory[cpu.i+uint16(i)]
 			}
+			cpu.pc += 2
 
 		}
 

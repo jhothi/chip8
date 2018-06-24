@@ -2,6 +2,7 @@ package emulator
 
 import (
 	"io/ioutil"
+	"fmt"
 )
 
 var fontSet = [80]byte{
@@ -30,16 +31,18 @@ type emulator struct {
 }
 
 func New() emulator {
-	cpu := newCpu()
-	e := emulator{cpu: cpu}
+	e := emulator{cpu: newCpu(), io: newIo()}
 	copy(e.memory[:], fontSet[:])
 	return e
 }
 
-func (e *emulator) Start(romPath string) [4096]byte {
+func (e *emulator) Start(romPath string) {
 	e.loadRom(romPath)
-	//e.cpu.emulate(e.memory[:])
-	return e.memory
+	fmt.Println(e.memory[512:])
+	for !e.io.window.Closed() {
+		e.cpu.emulate(e.memory[:], &	e.io)
+		e.io.window.Update()
+	}
 }
 
 func (e *emulator) loadRom(romPath string) [4096]byte {
@@ -49,3 +52,5 @@ func (e *emulator) loadRom(romPath string) [4096]byte {
 	}
 	return e.memory
 }
+
+
