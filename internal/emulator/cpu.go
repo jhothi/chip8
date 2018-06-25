@@ -2,7 +2,6 @@ package emulator
 
 import (
 	"math/rand"
-	"time"
 	"fmt"
 )
 
@@ -86,7 +85,7 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 			//The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
 			x := opCode & 0x0F00 >> 8
 			y := opCode & 0x00F0 >> 4
-			if x == y {
+			if cpu.v[x] == cpu.v[y] {
 				cpu.pc += 4
 			} else {
 				cpu.pc += 2
@@ -109,7 +108,8 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 		//Adds the value kk to the value of register Vx, then stores the result in Vx.
 		x := opCode & 0x0F00 >> 8
 		kk := byte(opCode & 0x00FF)
-		cpu.v[x] += kk
+		fmt.Printf("7xkk: x %X kk %X vx %d\n", x, kk, cpu.v[x])
+		cpu.v[x] = cpu.v[x] + kk
 		cpu.pc += 2
 
 	case 0x8000:
@@ -150,6 +150,7 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 			//Set Vx = Vx + Vy, set VF = carry.
 			//The values of Vx and Vy are added together. If the result is greater than 8 bits (i.e., > 255,)
 			//VF is set to 1, otherwise 0. Only the lowest 8 bits of the result are kept, and stored in Vx.
+			fmt.Println("8xy4")
 			var result = uint16(cpu.v[x]) + uint16(cpu.v[y])
 			if result > 255 {
 				cpu.v[0xF] = 1
@@ -163,6 +164,7 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 			//8xy5 - SUB Vx, Vy
 			//Set Vx = Vx - Vy, set VF = NOT borrow.
 			//If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx, and the results stored in Vx.
+			fmt.Println("8xy5")
 			if cpu.v[x] > cpu.v[y] {
 				cpu.v[0xF] = 1
 			} else {
@@ -175,6 +177,7 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 			//8xy6 - SHR Vx {, Vy}
 			//Set Vx = Vx SHR 1.
 			//If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
+			fmt.Println("8xy6")
 			if cpu.v[x]&1 == 1 {
 				cpu.v[0xF] = 1
 			} else {
@@ -187,6 +190,7 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 			//8xy7 - SUBN Vx, Vy
 			//Set Vx = Vy - Vx, set VF = NOT borrow.
 			//If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy, and the results stored in Vx.
+			fmt.Println("8xy7")
 			if cpu.v[y] > cpu.v[x] {
 				cpu.v[0xF] = 1
 			} else {
@@ -199,6 +203,7 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 			//8xyE - SHL Vx {, Vy}
 			//Set Vx = Vx SHL 1.
 			//If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
+			fmt.Println("8xyE")
 			if cpu.v[x]&0x80 == 1 {
 				cpu.v[0xF] = 1
 			} else {
@@ -213,9 +218,10 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 		//9xy0 - SNE Vx, Vy
 		//Skip next instruction if Vx != Vy.
 		//The values of Vx and Vy are compared, and if they are not equal, the program counter is increased by 2.
+		fmt.Println("9xy0")
 		x := opCode & 0x0F00 >> 8
 		y := opCode & 0x00F0 >> 4
-		if x != y {
+		if cpu.v[x] != cpu.v[y] {
 			cpu.pc += 4
 		} else {
 			cpu.pc += 2
@@ -232,6 +238,7 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 		//Bnnn - JP V0, addr
 		//Jump to location nnn + V0.
 		//The program counter is set to nnn plus the value of V0.
+		fmt.Printf("nnn %X v0 %X sum %X\n",(opCode & 0x0FFF), cpu.v[0], (opCode & 0x0FFF) + uint16(cpu.v[0]))
 		cpu.pc = (opCode & 0x0FFF) + uint16(cpu.v[0])
 
 	case 0xC000:
@@ -239,11 +246,13 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 		//Set Vx = random byte AND kk.
 		//The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk.
 		//The results are stored in Vx.
-		s1 := rand.NewSource(time.Now().UnixNano())
-		r1 := rand.New(s1)
+		//s1 := rand.NewSource(time.Now().UnixNano())
+		//r1 := rand.New(s1)
 		x := opCode & 0x0F00 >> 8
 		kk := opCode & 0x00FF
-		cpu.v[x] = byte(r1.Intn(255)) & byte(kk)
+		ran := byte(rand.Intn(255))
+		fmt.Printf("Cxkk x %X ran %X kk %X vx %X\n", x, ran, kk, cpu.v[x])
+		cpu.v[x] =  ran & byte(kk)
 		cpu.pc += 2
 
 	case 0xD000:
@@ -306,11 +315,12 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 			//Fx0A - LD Vx, K
 			//Wait for a key press, store the value of the key in Vx.
 			//All execution stops until a key is pressed, then the value of that key is stored in Vx.
-			//val, err := io.readKeyPress()
-			//if err == nil {
-			//	cpu.v[x] = val
-			//}
-			//cpu.pc += 2
+			val, err := io.readKeyPress()
+			if err == nil {
+				cpu.v[x] = val
+				cpu.pc += 2
+			}
+
 
 		case 0x15:
 			//Fx15 - LD DT, Vx
@@ -372,6 +382,13 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 	default:
 		panic("Instruction not implemented")
 	}
+	if cpu.delayTimer > 0 {
+		cpu.delayTimer--
+	}
+	if cpu.soundTimer > 0{
+		//cpu.soundTimer--
+	}
+
 }
 
 func newCpu() cpu {

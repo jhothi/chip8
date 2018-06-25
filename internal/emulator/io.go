@@ -5,26 +5,28 @@ import (
 	"image"
 	"github.com/faiface/pixel"
 	"fmt"
+	"github.com/go-gl/glfw/v3.2/glfw"
+	"errors"
 )
 
-//var keyMap = map[pixelgl.Button]byte{
-//	pixelgl.Button(glfw.Key1): 1,
-//	pixelgl.Button(glfw.Key2): 2,
-//	pixelgl.Button(glfw.Key3): 3,
-//	pixelgl.Button(glfw.Key4): 0xC,
-//	pixelgl.Button(glfw.KeyQ): 4,
-//	pixelgl.Button(glfw.KeyW): 5,
-//	pixelgl.Button(glfw.KeyE): 6,
-//	pixelgl.Button(glfw.KeyR): 0xD,
-//	pixelgl.Button(glfw.KeyA): 7,
-//	pixelgl.Button(glfw.KeyS): 8,
-//	pixelgl.Button(glfw.KeyD): 9,
-//	pixelgl.Button(glfw.KeyF): 0xE,
-//	pixelgl.Button(glfw.KeyZ): 0xA,
-//	pixelgl.Button(glfw.KeyX): 0,
-//	pixelgl.Button(glfw.KeyC): 0xB,
-//	pixelgl.Button(glfw.KeyV): 0xF,
-//}
+var keyMap = map[pixelgl.Button]byte{
+	pixelgl.Button(glfw.Key1): 1,
+	pixelgl.Button(glfw.Key2): 2,
+	pixelgl.Button(glfw.Key3): 3,
+	pixelgl.Button(glfw.Key4): 0xC,
+	pixelgl.Button(glfw.KeyQ): 4,
+	pixelgl.Button(glfw.KeyW): 5,
+	pixelgl.Button(glfw.KeyE): 6,
+	pixelgl.Button(glfw.KeyR): 0xD,
+	pixelgl.Button(glfw.KeyA): 7,
+	pixelgl.Button(glfw.KeyS): 8,
+	pixelgl.Button(glfw.KeyD): 9,
+	pixelgl.Button(glfw.KeyF): 0xE,
+	pixelgl.Button(glfw.KeyZ): 0xA,
+	pixelgl.Button(glfw.KeyX): 0,
+	pixelgl.Button(glfw.KeyC): 0xB,
+	pixelgl.Button(glfw.KeyV): 0xF,
+}
 
 type io struct {
 	window *pixelgl.Window
@@ -39,18 +41,22 @@ func (io *io) draw(sprite []byte, xPos byte, yPos byte) bool {
 	return collision
 }
 
-//
-//func (io *io) readKeyPress() (byte, error) {
-//	for k, v := range keyMap {
-//		if io.window.JustPressed(k) {
-//			io.keys[v] = 1
-//			return v, nil
-//		}
-//	}
-//	return 0, errors.New("no key pressed")
-//}
+
+func (io *io) readKeyPress() (byte, error) {
+	for k, v := range keyMap {
+		if io.window.JustPressed(k) {
+			io.keys[v] = 1
+			return v, nil
+		}
+	}
+	return 0, errors.New("no key pressed")
+}
 
 func (io *io) getKeyPress(pos byte) byte {
+	if io.keys[pos] == 1 {
+		io.keys[pos] = 0
+		return 1
+	}
 	return io.keys[pos]
 }
 
@@ -81,16 +87,16 @@ func toSprite(grid []byte) *pixel.Sprite {
 func copySpriteToGrid(sprite []byte, grid []byte, xPos byte, yPos byte) bool {
 	collision := false
 	for index, value := range sprite {
-		startPos := int(xPos) + ((int(yPos) + index) * 64)
+		startPos := int(xPos) + ((int(yPos) + index) * 64) % 2048
 		for bitIndex := 7; bitIndex >= 0; bitIndex-- {
-			collision = collision || copyBitToGrid(getBit(value, byte(bitIndex)), grid, startPos+7-bitIndex)
+			collision = copyBitToGrid(getBit(value, byte(bitIndex)), grid, startPos+7-bitIndex) || collision
 		}
 	}
 	return collision
 }
 
 func copyBitToGrid(bit byte, grid []byte, pos int) bool {
-	fmt.Println(pos)
+	fmt.Printf("pos %v", pos)
 	previousValue := grid[pos]
 	grid[pos] ^= bit
 	return previousValue == 1 && grid[pos] == 0

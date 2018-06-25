@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/faiface/pixel/pixelgl"
 	"chip8/internal/emulator"
+	"github.com/faiface/pixel/pixelgl"
 )
 
 func run() {
@@ -11,5 +11,7 @@ func run() {
 }
 
 func main() {
+	//x := byte(8)
+	//fmt.Println(x + byte(0xFF))
 	pixelgl.Run(run)
 }

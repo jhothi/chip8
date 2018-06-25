@@ -25,13 +25,15 @@ var fontSet = [80]byte{
 }
 
 type emulator struct {
-	cpu    cpu
-	io     io
+	cpu    *cpu
+	io     *io
 	memory [4096]byte
 }
 
 func New() emulator {
-	e := emulator{cpu: newCpu(), io: newIo()}
+	cpu := newCpu()
+	io := newIo()
+	e := emulator{cpu: &cpu, io: &io}
 	copy(e.memory[:], fontSet[:])
 	return e
 }
@@ -40,7 +42,8 @@ func (e *emulator) Start(romPath string) {
 	e.loadRom(romPath)
 	fmt.Println(e.memory[512:])
 	for !e.io.window.Closed() {
-		e.cpu.emulate(e.memory[:], &	e.io)
+		e.cpu.emulate(e.memory[:], e.io)
+		e.io.readKeyPress()
 		e.io.window.Update()
 	}
 }
