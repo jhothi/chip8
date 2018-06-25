@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"github.com/go-gl/glfw/v3.2/glfw"
 	"errors"
+	"os"
+	"image/png"
 )
 
 var keyMap = map[pixelgl.Button]byte{
@@ -77,8 +79,8 @@ func toSprite(grid []byte) *pixel.Sprite {
 	}
 	//fmt.Println(grid)
 	//fmt.Println(img.Pix)
-	//myfile, _ := os.Create("test.png")
-	//png.Encode(myfile, img)
+	myfile, _ := os.Create("test.png")
+	png.Encode(myfile, img)
 	pic := pixel.PictureDataFromImage(img)
 	//fmt.Println(pic.Bounds())
 	return pixel.NewSprite(pic, pic.Bounds())

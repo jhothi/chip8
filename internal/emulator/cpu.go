@@ -3,6 +3,7 @@ package emulator
 import (
 	"math/rand"
 	"fmt"
+	"time"
 )
 
 type cpu struct {
@@ -15,7 +16,7 @@ type cpu struct {
 	sp         uint16
 }
 
-func (cpu *cpu) emulate(memory []byte, io *io) {
+func (cpu *cpu) emulate(memory []byte, io *io) bool{
 	opCode := uint16(memory[cpu.pc])<<8 | uint16(memory[cpu.pc+1])
 	fmt.Printf("Read opCode %X cpu %v\n", opCode, cpu)
 	switch opCode & 0xF000 {
@@ -246,12 +247,11 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 		//Set Vx = random byte AND kk.
 		//The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk.
 		//The results are stored in Vx.
-		//s1 := rand.NewSource(time.Now().UnixNano())
-		//r1 := rand.New(s1)
+		s1 := rand.NewSource(time.Now().UnixNano())
+		r1 := rand.New(s1)
 		x := opCode & 0x0F00 >> 8
 		kk := opCode & 0x00FF
-		ran := byte(rand.Intn(255))
-		fmt.Printf("Cxkk x %X ran %X kk %X vx %X\n", x, ran, kk, cpu.v[x])
+		ran := byte(r1.Intn(255))
 		cpu.v[x] =  ran & byte(kk)
 		cpu.pc += 2
 
@@ -273,6 +273,7 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 			cpu.v[15] = 0
 		}
 		cpu.pc += 2
+		return true
 
 	case 0xE000:
 		x := opCode & 0x0F00 >> 8
@@ -347,7 +348,8 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 			//Fx29 - LD F, Vx
 			//Set I = location of sprite for digit Vx.
 			//The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx.
-			cpu.i = uint16(memory[cpu.v[x]*5])
+			fmt.Printf("Fx29 vx %X pos %X mem %X", cpu.v[x], 80 + uint16(cpu.v[x]) *5, memory[80 + uint16(cpu.v[x]) *5])
+			cpu.i = uint16(cpu.v[x]) * 5
 			cpu.pc += 2
 
 		case 0x33:
@@ -388,6 +390,7 @@ func (cpu *cpu) emulate(memory []byte, io *io) {
 	if cpu.soundTimer > 0{
 		//cpu.soundTimer--
 	}
+	return false
 
 }
 

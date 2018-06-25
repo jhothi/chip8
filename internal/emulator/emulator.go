@@ -42,7 +42,9 @@ func (e *emulator) Start(romPath string) {
 	e.loadRom(romPath)
 	fmt.Println(e.memory[512:])
 	for !e.io.window.Closed() {
-		e.cpu.emulate(e.memory[:], e.io)
+		if e.cpu.emulate(e.memory[:], e.io) {
+
+		}
 		e.io.readKeyPress()
 		e.io.window.Update()
 	}
